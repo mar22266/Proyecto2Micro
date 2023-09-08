@@ -11,31 +11,20 @@
 #include <stdlib.h>
 #include <time.h>
 #include <pthread.h>
+#include <thread>
 #include <random>
 #include <map>
 
 using namespace std;
+using namespace std::chrono;
 #define NTHREADS 8
 
-//Estructura de parametros para la carrera
-void *simularCarrera(void *threadNum){
-    long tID;
-    tID = (long) threadNum;
-
-    cout << "Hello thread : " << tID << endl;
-
-    pthread_exit(NULL);
-};
-
-struct dataCarrera{
-    int circuito;
-    int gasolina;
-    int llantas;
-    int vueltas;
-    float probabilidadLluvia;
-};
-
+void *simularCarrera(void *dataCarrera);
 double randomEntre0Y1();
+
+int gasolina,llantas,vueltas,circuitoTiempo;
+float probabilidadLluvia;
+double resultados[NTHREADS];
 
 int main(){
     //Definir tiempos de los circuitos
@@ -52,10 +41,7 @@ int main(){
 
     //Instaciar variables
     int i, rc;
-    int gasolina,llantas,vueltas;
     int circuitoSeleccionado;
-    float probabilidadLluvia;
-
 
     //Opciones de pistas para el usuario
     cout << "Ingrese el número de circuito que desea: " << endl;
@@ -84,20 +70,12 @@ int main(){
     //Definir Probabilidad de lluvia
     probabilidadLluvia = randomEntre0Y1();
 
-    //Intanciar objeto de parametros a pasar en el hilo
-    dataCarrera data;
-    data.circuito = circuito[circuitoSeleccionado];
-    data.gasolina = gasolina;
-    data.llantas = llantas;
-    data.vueltas = vueltas;
-    data.probabilidadLluvia = probabilidadLluvia;
-
+    circuitoTiempo = circuito[circuitoSeleccionado];
 
     //Crear hilos
-    pthread_t tid[vueltas];
+    pthread_t tid[NTHREADS];
     pthread_attr_t attr;
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
 
     for (i=0; i<NTHREADS; i++)
     {
@@ -109,17 +87,29 @@ int main(){
         }
     }
 
-    //Esperar a que los hilos terminen
     for(i=0; i<NTHREADS;i++)
     {
         rc = pthread_join(tid[i], NULL);
 
         if (rc)
         {
-            printf("ERROR: return code from pthread_join() is %d \n", rc);
+            printf("ERROR: return code from pthread_joid() is %d \n", rc);
             exit(-1);
         }
         
+    }
+
+    //Imprimir resultados
+    cout << "Resultados: " << endl;
+    for (int i = 0; i < NTHREADS; i++)
+    {
+        if (resultados[i] == -1) {
+            cout << "Auto " << i << " se accidentó y quedó descalificado" << endl;
+            continue;
+        }
+        else {
+            cout << "Auto " << i << " terminó en " << resultados[i] << " segundos" << endl;
+        }
     }
 
     pthread_attr_destroy(&attr);
@@ -131,6 +121,76 @@ int main(){
 double randomEntre0Y1() {
     return (double)rand() / (double)RAND_MAX;
 }
+
+//Estructura de parametros para la carrera
+void *simularCarrera(void* threadNum){
+
+    int carName = (long) threadNum;
+
+
+    auto startTimeG = std::chrono::high_resolution_clock::now();
+    auto endTime = std::chrono::high_resolution_clock::now();
+    duration<double> elapsedSeconds;
+    
+    for (int j = 0; j < vueltas; j++)
+    {
+        auto startTime = std::chrono::high_resolution_clock::now();
+        if (j % gasolina*llantas){
+            cout << "El auto " << carName << " se detuvo a cambiar llantas y a cargar gasolina en la vuelta: " << j << endl;
+            this_thread::sleep_for(chrono::seconds(2));
+        }
+        else if (j % gasolina){
+            cout << "El auto " << carName << " se detuvo a cargar gasolina en la vuelta: " << j << endl;
+            this_thread::sleep_for(chrono::seconds(1));
+        }
+        else if (j % llantas){
+            cout << "El auto " << carName << " se detuvo a cambiar llantas en la vuelta: " << j << endl;
+            this_thread::sleep_for(chrono::seconds(1));
+        }
+        else{
+            cout << "El auto " << carName << " está corriendo en la vuelta: " << j << endl;
+        }
+
+        float isRain = randomEntre0Y1();
+        float isAccident = randomEntre0Y1();
+        if (probabilidadLluvia > isRain){
+            if (isAccident < 0.05)
+            {
+                cout << "El auto " << carName << " se accidentó en la vuelta y queda descalificado en la vuelta: " << j << endl;
+                resultados[carName] = -1;
+                pthread_exit(NULL);
+            }
+            else
+            {
+                cout << "Por la lluvia el auto " << carName << " se retrasa 1 segundo en la vuelta en la vuelta: " << j << endl;
+                this_thread::sleep_for(chrono::seconds(1));
+            }
+        }
+        else {
+            if (isAccident < 0.01)
+            {
+                cout << "El auto " << carName << " se accidentó en la vuelta y queda descalificado en la vuelta: " << j << endl;
+                resultados[carName] = -1;
+                pthread_exit(NULL);
+            }
+            else 
+            {
+                cout << "El auto " << carName << " está corriendo en la vuelta: " << j << endl;
+            }
+        }
+
+        this_thread::sleep_for(chrono::seconds(circuitoTiempo));
+        endTime = std::chrono::high_resolution_clock::now();
+        elapsedSeconds = endTime - startTime;
+        cout << "El auto " << carName << " ha terminado la vuelta: " << j << " en " << elapsedSeconds.count() << " segundos" << endl;
+        startTime = endTime;
+
+    }
+    elapsedSeconds = endTime - startTimeG;
+    cout << "El auto " << carName << " ha terminado la carrera en: " << elapsedSeconds.count() << " segundos" << endl;
+    resultados[carName] = elapsedSeconds.count();
+    pthread_exit(NULL);
+};
 
 
 //Compile with g++ -std=c++11 -pthread Carreras.cpp -o Carreras
