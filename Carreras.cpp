@@ -157,6 +157,9 @@ int main(){
     pthread_attr_destroy(&attr);
     pthread_exit(NULL);
 
+    pthread_mutex_destroy(&mutex);
+    pthread_cond_destroy(&accidente);
+
     return 0;
 }
 
